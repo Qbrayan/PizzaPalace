@@ -1,0 +1,222 @@
+﻿@model PizzaPalace.ViewModels.PizzaViewModel
+
+@{
+    ViewData["Title"] = "Home";
+}
+
+    <div class="container">
+        <div class="form-horizontal">
+            <h4>Order your pizza</h4>
+            <div class="form-group">
+                <h4><label for="size">Size</label></h4>
+                @(Html.Kendo().ComboBox()
+          .Name("size")
+          .Filter(FilterType.Contains)
+          .Placeholder("Select Pizza Size...")
+          .DataTextField("Text")
+          .DataValueField("Value")
+          .BindTo(Model.Sizes)
+          .SelectedIndex(0)
+          .Suggest(true)
+          .HtmlAttributes(new { style = "width:50%;" })
+    )
+            </div>
+            <div class="form-group">
+                <h4><label for="topping">Toppings</label></h4>
+                @(Html.Kendo().MultiSelect()
+          .Name("topping")
+          .Placeholder("Select Toppings...")
+          .BindTo(Model.Toppings)
+          .HtmlAttributes(new { style = "width:50%;" })
+
+        )
+            </div>
+            <div class="form-group">
+                <button class="k-button k-primary" id="get">Add Cart</button>
+            </div>
+        </div>
+
+        <div class="row">
+            @(Html.Kendo().Grid<PizzaPalace.ViewModels.PizzaViewModel>()
+    .Name("grid")
+    .Columns(columns =>
+    {
+        columns.Select().Width(75).HtmlAttributes(new { @class = "checkbox-align" }).HeaderHtmlAttributes(new { @class = "checkbox-align" });
+        columns.Bound(p => p.ProductName)
+                .ClientTemplate(
+                    @"<div class='product-photo'
+                        style='background-image: url(" + @Url.Content("~/images/pizza.jpg") + ");'></div><div class='product-name'>#: ProductName #</div>").Width(300);
+        columns.Bound(p => p.UnitPrice).Title("Price").Width(105);
+        columns.Bound(p => p.Category).Title("Category").EditorTemplateName("ClientCategoryEditor").ClientGroupHeaderTemplate("Category: #=data.value#, Total : #=kendo.format('{0:c}', data.aggregates.Total.sum)#").Width(125);
+
+        columns.Bound(p => p.Units).Title("Units").Width(105);
+        columns.Bound(p => p.Total).Title("Total").Width(140).Format("{0:c}");
+        columns.Command(command => command.Custom("Delete").Click("DeleteButton")).Width(180);
+    })
+    .ToolBar(toolbar =>
+    {
+        toolbar.Search();
+        toolbar.Excel();
+        toolbar.Pdf();
+    })
+    .ColumnMenu(col=>col.Filterable(false))
+    .Height(500)
+    .Editable(editable => editable.Mode(GridEditMode.InLine))
+    .Pageable()
+    .Sortable()
+    .Navigatable()
+    .Resizable(r=>r.Columns(true))
+    .Reorderable(r => r.Columns(true))
+    .Groupable(g=>g.ShowFooter(false))
+    .Filterable()
+    .Scrollable()
+    .Events(events => events.DataBound("onDataBound"))
+    .DataSource(dataSource => dataSource
+        .Ajax()
+        .Batch(true)
+        .PageSize(20)
+        .AutoSync(true)
+        .ServerOperation(false)
+        .Events(events => events.Error("error_handler"))
+        .Model(model =>
+        {
+            model.Id(p => p.ProductID);
+            model.Field(p => p.ProductName).Editable(false);
+            model.Field(p => p.UnitPrice).Editable(false);
+            model.Field(p => p.Units).Editable(false);
+            model.Field(p => p.Total).Editable(false);
+            model.Field(p => p.Category).Editable(false);
+        })
+        .Group(group=>group.Add("Category", typeof(string)))
+        .Aggregates(agg=>agg.Add(field=>field.Total).Sum())
+
+
+    )
+)
+        </div>
+
+        <div class="form-group row">
+            <button class="k-button k-primary" id="buy">Purchase</button>
+        </div>
+    </div>
+
+
+
+
+
+
+    @section Scripts{
+        <script>
+            function DeleteButton(e) {
+                e.preventDefault();
+
+                var dataItem = this.dataItem($(e.currentTarget).closest("tr"));
+                 $.ajax({
+                        type: "POST",
+                        url: "Home/Destroy?id=" + dataItem.ProductID,
+                        dataType: 'json',
+                        contentType: "application/json; charset=utf-8",
+                        success: function (result) {
+                            $('#grid').data("kendoGrid").dataSource = new kendo.data.DataSource({ data: result });
+                            $('#grid').data("kendoGrid").dataSource.read();
+                            $('#grid').data("kendoGrid").refresh();
+
+                        },
+                        error: function (xhr) {
+                            alert("An error occured: " + xhr.status + " " + xhr.statusText)
+                        }
+
+                    })
+
+            }
+
+            function error_handler(e) {
+                if (e.errors) {
+                    var message = "Errors:\n";
+                    $.each(e.errors, function (key, value) {
+                        if ('errors' in value) {
+                            $.each(value.errors, function () {
+                                message += this + "\n";
+                            });
+                        }
+                    });
+                    alert(message);
+                }
+            }
+
+            function onDataBound(e) {
+                var grid = this;
+                grid.table.find("tr").each(function () {
+                    var dataItem = grid.dataItem(this);
+
+                    $(this).find('script').each(function () {
+                        eval($(this).html());
+                    });
+
+
+                    kendo.bind($(this), dataItem);
+                });
+            }
+
+            function returnFalse() {
+                return false;
+            }
+
+            $(document).ready(function () {
+                var size = $("#size").data("kendoComboBox");
+                var toppings = $("#topping").data("kendoMultiSelect");
+                $("#get").click(function () {
+                    var order = {
+                        Category: size.value(),
+                        ProductName:toppings.value().join()
+                    };
+                    $.ajax({
+                        type: "GET",
+                        url: '@Url.Action("AddCart", "Home")',
+                        data: order,
+                        dataType: 'json',
+                        contentType: "application/json; charset=utf-8",
+                        success: function (result) {
+                            $('#grid').data("kendoGrid").dataSource = new kendo.data.DataSource({ data: result });
+                            $('#grid').data("kendoGrid").dataSource.read();
+                            $('#grid').data("kendoGrid").refresh();
+
+                        },
+                        error: function (xhr) {
+                            alert("An error occured: " + xhr.status + " " + xhr.statusText)
+                        }
+
+                    })
+                });
+
+
+                $("#buy").click(function () {
+
+                    $.ajax({
+                        type: "POST",
+                        url: '@Url.Action("Create", "Home")',
+                        dataType: 'json',
+                        contentType: "application/json; charset=utf-8",
+                        success: function (result) {
+                            //$('#grid').data("kendoGrid").dataSource = new kendo.data.DataSource({ data: result });
+                            alert(result);
+                            $('#grid').data("kendoGrid").dataSource.read();
+                            $('#grid').data("kendoGrid").refresh();
+
+                        },
+                        error: function (xhr) {
+                            alert("An error occured: " + xhr.status + " " + xhr.statusText)
+                        }
+
+                    })
+                });
+
+
+
+
+            });
+        </script>
+
+
+    }
+
